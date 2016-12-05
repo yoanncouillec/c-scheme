@@ -1,0 +1,6 @@
+(let (false (lambda (x) (lambda (y) y)))
+  (let (cond (lambda (c) (lambda (x) (lambda (y) ((c x) y)))))
+    (let (not (lambda (x) (((cond x) false) true)))
+      (let (or (lambda (x) (lambda (y) (((cond x) true) y))))
+	(let (and (lambda (x) (lambda (y) (((cond x) y) false))))
+	  ((or true) true))))))
