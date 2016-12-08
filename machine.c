@@ -8,7 +8,7 @@
 char * gen_ident () {
   static int n = 0;
   char * ret = malloc(sizeof(char)*32);
-  sscanf (ret, "x%d", &n);
+  sprintf (ret, "x%d",n);
   n++;
   return ret;
 }
@@ -19,14 +19,14 @@ struct ENV * make_env () {
   return NULL;
 }
 
-struct VALUE * get_env (struct ENV * env, char * ident) {
+struct TERM * get_env (struct ENV * env, char * ident) {
   if (env == NULL) {
     fprintf (stderr, "get_env : no such binding %s\n", ident);
     return NULL;
   }
   else {
     if (strcmp (ident, env->ident) == 0) {
-      return env->value;
+      return env->term;
     }
     else {
       return get_env (env->next, ident);
@@ -34,10 +34,10 @@ struct VALUE * get_env (struct ENV * env, char * ident) {
   }
 }
 
-struct ENV * set_env (struct ENV * env, char * ident, struct VALUE * value) {
+struct ENV * set_env (struct ENV * env, char * ident, struct TERM * term) {
   struct ENV * ret = malloc (sizeof (struct ENV));
   ret->ident = ident;
-  ret->value = value;
+  ret->term = term;
   ret->next = env;
   return ret;
 }
@@ -73,6 +73,15 @@ struct TERM * make_term_abstraction (char * variable, struct TERM * body) {
   return ret;
 }
 
+struct TERM * make_term_closure (char * variable, struct TERM * body, struct ENV * env) {
+  struct TERM * ret = malloc (sizeof (struct TERM));
+  ret->type = TYPE_TERM_CLOSURE;
+  ret->closure.variable = variable;
+  ret->closure.body = body;
+  ret->closure.env = env;
+  return ret;
+}
+
 struct TERM * make_term_application (struct TERM * left, struct TERM * right) {
   struct TERM * ret = malloc (sizeof (struct TERM));
   ret->type = TYPE_TERM_APPLICATION;
@@ -90,47 +99,29 @@ struct TERM * make_term_let (char * variable, struct TERM * init, struct TERM * 
   return ret;
 }
 
-/* ----------------------------------- VALUE -------------------------------- */
-
-struct VALUE * make_value_integer (int value) {
-  struct VALUE * ret = malloc (sizeof (struct VALUE));
-  ret->type = TYPE_VALUE_INTEGER;
-  ret->integer.value = value;
-  return ret;
-}
-
-struct VALUE * make_value_term (struct TERM * value) {
-  struct VALUE * ret = malloc (sizeof (struct VALUE));
-  ret->type = TYPE_VALUE_TERM;
-  ret->term.value = value;
-  return ret;
-}
-
-struct VALUE * make_value_closure (char * var, struct TERM * body, struct ENV * env) {
-  struct VALUE * ret = malloc (sizeof (struct VALUE));
-  ret->type = TYPE_VALUE_CLOSURE;
-  ret->closure.variable = var;
-  ret->closure.body = body;
-  ret->closure.env = env;
-  return ret;
-}
-
 /* ----------------------------------- EVAL --------------------------------- */
 
-struct VALUE * evaluate_term (struct TERM * term, struct ENV * env) {
+struct TERM * evaluate_term (struct TERM * term, struct ENV * env) {
   switch (term->type) {
   case TYPE_TERM_INTEGER : {
-    return make_value_integer (term->integer.value) ; }
+    return term ;
+  }
   case TYPE_TERM_VARIABLE : {
-    return get_env (env, term->variable.value) ; }
+    return get_env (env, term->variable.value) ; 
+  }
   case TYPE_TERM_QUOTE : {
-    return make_value_term (term->quote.content) ; }
+    return term->quote.content ; 
+  }
   case TYPE_TERM_ABSTRACTION : {
-    return make_value_closure (term->abstraction.variable, term->abstraction.body, env); }
+    return make_term_closure (term->abstraction.variable, term->abstraction.body, env); 
+  }
+  case TYPE_TERM_CLOSURE : {
+    return term;
+  }
   case TYPE_TERM_APPLICATION : {
-    struct VALUE * value1 = evaluate_term (term->application.left, env);
+    struct TERM * value1 = evaluate_term (term->application.left, env);
     switch (value1->type) {
-    case TYPE_VALUE_CLOSURE : {
+    case TYPE_TERM_CLOSURE : {
       return evaluate_term (value1->closure.body,
 			    set_env (value1->closure.env,
 				     value1->closure.variable, 
@@ -142,7 +133,7 @@ struct VALUE * evaluate_term (struct TERM * term, struct ENV * env) {
       return NULL;
     }}}
   case TYPE_TERM_LET : {
-    struct VALUE * value1 = evaluate_term (term->let.init, env);
+    struct TERM * value1 = evaluate_term (term->let.init, env);
     return evaluate_term (term->let.body, set_env (env, term->let.variable, value1));
   }}
 }
@@ -189,6 +180,14 @@ void fprint_term (FILE * out, struct TERM * tree, struct ENV * env) {
       fprint_term (out, tree->abstraction.body, env) ;
       fprintf(out,")");
       break;
+    case TYPE_TERM_CLOSURE : 
+      TRACE("closure")
+      fprintf(out,"(lambda (%s) ", tree->closure.variable);
+      fprint_term (out, tree->closure.body, env) ;
+      fprintf(out,"){");
+      fprint_env(out, tree->closure.env);
+      fprintf(out,"}");
+      break;
     case TYPE_TERM_APPLICATION : 
       TRACE("application")
       fprintf(out,"(");
@@ -212,33 +211,16 @@ void fprint_term (FILE * out, struct TERM * tree, struct ENV * env) {
     //}
 }
 
-void fprint_value (FILE * out, struct VALUE * value, struct ENV * env) {
-  switch (value->type) {
-  case TYPE_VALUE_INTEGER :
-    fprintf(out,"%d", value->integer.value);
-    break;
-  case TYPE_VALUE_TERM :
-    fprint_term (out,value->term.value, NULL);
-    break;
-  case TYPE_VALUE_CLOSURE : 
-    fprint_term (out,value->closure.body, env) ; //TODO: display variable
-    fprintf(out,"[");
-    fprint_env (out,value->closure.env);
-    fprintf(out,"]");
-    break;
-  }
-}
-
 void fprint_env (FILE * out, struct ENV * env) {
   if (env != NULL) {
     if (env->next != NULL) {
       fprintf(out,"%s -> ", env->ident);
-      fprint_value (out,env->value, env);
+      fprint_term (out,env->term, env);
       printf(", ");
     }
     else{
       fprintf(out,"%s -> ", env->ident);
-      fprint_value (out,env->value, env);
+      fprint_term (out,env->term, env);
     }
   }
 }
@@ -333,12 +315,12 @@ void fprint_stack (FILE * out, struct STACK * stack) {
   }
 }
 
-struct DEBRUIJN * make_debruijn_closure (struct DEBRUIJN * debruijn,
+struct DEBRUIJN * make_debruijn_closure (struct DEBRUIJN * body,
 					 struct STACK * stack){
   struct DEBRUIJN * ret;
   ret = malloc (sizeof (struct DEBRUIJN));
   ret->type = TYPE_DEBRUIJN_CLOSURE;
-  ret->closure.body = debruijn;
+  ret->closure.body = body;
   ret->closure.stack = stack;
   return ret;
 }
@@ -370,6 +352,14 @@ struct DEBRUIJN * term_to_debruijn (struct TERM * term, struct STACK * stack) {
     debruijn->abstraction.body = 
       term_to_debruijn (term->abstraction.body, 
 			set_stack (stack, term->abstraction.variable, NULL));
+    break; }
+  case TYPE_TERM_CLOSURE : {
+    TRACE("closure")
+    debruijn->type = TYPE_DEBRUIJN_CLOSURE;
+    debruijn->closure.body = 
+      term_to_debruijn (term->closure.body, 
+			set_stack (stack, term->closure.variable, NULL));
+    debruijn->closure.stack = NULL; // TODO: env to stack :/
     break; }
   case TYPE_TERM_APPLICATION : {
     TRACE("application")
@@ -414,14 +404,15 @@ struct TERM * debruijn_to_term (struct DEBRUIJN * debruijn, struct STACK * stack
   case TYPE_DEBRUIJN_ABSTRACTION : {
     TRACE("abstraction");
     char * var = gen_ident();
-    struct STACK * s = set_stack(stack, gen_ident(), NULL); // We just want to get ident
+    struct STACK * s = set_stack(stack, var, NULL); // We just want to get ident
     return make_term_abstraction (var,debruijn_to_term(debruijn->abstraction.body, s));
     break ; 
   }
   case TYPE_DEBRUIJN_CLOSURE : {
     TRACE("closure");
-    fprintf(stderr, "Cannot transform debruijn closure to term\n");
-    exit(1);
+    char * var = gen_ident();
+    struct STACK * s = set_stack(stack, var, NULL); // We just want to get ident
+    return make_term_closure (var,debruijn_to_term(debruijn->abstraction.body, s), NULL); // Shouldn't be NULL. Should be stack->env transformation
     break ; 
   }
   case TYPE_DEBRUIJN_APPLICATION : {
@@ -488,7 +479,7 @@ struct DEBRUIJN * eval_debruijn (struct DEBRUIJN * debruijn, struct STACK * stac
   }
   case TYPE_DEBRUIJN_ABSTRACTION : {
     TRACE("abstraction");
-    return make_debruijn_closure (debruijn, stack);
+    return make_debruijn_closure (debruijn->abstraction.body, stack);
     break ; 
   }
   case TYPE_DEBRUIJN_CLOSURE : {

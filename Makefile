@@ -17,7 +17,12 @@ fun.c: fun.yacc lex.yy.c
 lex.yy.c: fun.lex
 	lex -o $@ $^
 
-test: fun
+simple-test: fun
+	./fun < test/test.integer.fun
+	./fun < test/test.quote.fun
+	./fun < test/test.lambda.fun
+
+more-test: fun
 	./fun < test/test.lambda0.fun
 	./fun < test/test.lambda1.fun
 	./fun < test/test.lambda2.fun

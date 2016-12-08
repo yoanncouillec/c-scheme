@@ -19,13 +19,13 @@ FILE * debug_file;
 
 struct ENV {
   char * ident;
-  struct VALUE * value;
+  struct TERM * term;
   struct ENV * next;
 };
 
 struct ENV * make_env();
-struct VALUE * get_env (struct ENV * env, char * ident);
-struct ENV * set_env (struct ENV * env, char * ident, struct VALUE * value);
+struct TERM * get_env (struct ENV * env, char * ident);
+struct ENV * set_env (struct ENV * env, char * ident, struct TERM * value);
 
 /* ----------------------------------- TERM --------------------------------- */
 
@@ -34,6 +34,7 @@ enum TYPE_TERM {
   TYPE_TERM_VARIABLE, 
   TYPE_TERM_QUOTE,
   TYPE_TERM_ABSTRACTION,
+  TYPE_TERM_CLOSURE,
   TYPE_TERM_APPLICATION,
   TYPE_TERM_LET
 };
@@ -55,6 +56,11 @@ struct TERM {
       struct TERM * body;
     } abstraction;
     struct {
+      char * variable;
+      struct TERM * body;
+      struct ENV * env;
+    } closure;
+    struct {
       struct TERM * left;
       struct TERM * right;
     } application;
@@ -70,46 +76,17 @@ struct TERM * make_term_variable (char * value);
 struct TERM * make_term_integer (int value);
 struct TERM * make_term_quote (struct TERM * content);
 struct TERM * make_term_abstraction (char * variable, struct TERM * body);
+struct TERM * make_term_closure (char * variable, struct TERM * body, struct ENV * env);
 struct TERM * make_term_application (struct TERM * left, struct TERM * right);
 struct TERM * make_term_let (char * variable, struct TERM * init, struct TERM * body);
 
-/* ----------------------------------- VALUE -------------------------------- */
-
-enum TYPE_VALUE {
-  TYPE_VALUE_INTEGER,
-  TYPE_VALUE_TERM,
-  TYPE_VALUE_CLOSURE
-};
-
-struct VALUE {
-  enum TYPE_VALUE type;
-  union {
-    struct {
-      int value;
-    } integer;
-    struct {
-      struct TERM * value;
-    } term;
-    struct {
-      char * variable;
-      struct TERM * body;
-      struct ENV * env;
-    } closure;
-  };
-};
-
-struct VALUE * make_value_integer (int value);
-struct VALUE * make_value_term (struct TERM * value);
-struct VALUE * make_value_closure (char * variable, struct TERM * body, struct ENV * env);
-
 /* ----------------------------------- EVAL --------------------------------- */
 
-struct VALUE * evaluate_term (struct TERM * term, struct ENV * env);
+struct TERM * evaluate_term (struct TERM * term, struct ENV * env);
 
 /* ----------------------------------- PRINT -------------------------------- */
 
 void fprint_term (FILE * out, struct TERM * term, struct ENV * env);
-void fprint_value (FILE * out, struct VALUE * value, struct ENV * env);
 void fprint_env (FILE * out, struct ENV * env);
 
 /* --------------------------------- DE BRUIJN ------------------------------ */

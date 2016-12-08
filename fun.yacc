@@ -109,8 +109,9 @@ int main (int argc, char *argv[]) {
     fprintf(output_file, "\n=> ");
   }
   struct TERM * t = eval_term (term, env);
-  //fprint_debruijn(output_file, v_debruijn);
-  //fprintf (output_file, "\n");
+  fprint_term(output_file, t,env);
+  fprintf (output_file, "\n\n");
+
   return 0;
 }
 
@@ -130,7 +131,7 @@ struct TERM * eval_term (struct TERM * term, struct ENV * env) {
   struct TERM * true_term = 
     make_term_abstraction("y", 
       make_term_variable("x"));
-  env = set_env (env, "true", make_value_closure ("x", true_term, env));
+  env = set_env (env, "true", make_term_closure ("x", true_term, env));
   stack = set_stack(stack,"x",NULL);
   struct DEBRUIJN * true_debruijn = term_to_debruijn (true_term, stack);
   struct DEBRUIJN * x = make_debruijn_closure (true_debruijn, stack);
@@ -141,7 +142,7 @@ struct TERM * eval_term (struct TERM * term, struct ENV * env) {
   struct TERM * false_term = 
       make_term_abstraction("y", 
 	make_term_variable("y"));
-  env = set_env (env, "false", make_value_closure ("x", false_term, env));
+  env = set_env (env, "false", make_term_closure ("x", false_term, env));
   stack = set_stack(stack,"x",NULL);
   struct DEBRUIJN * false_debruijn = term_to_debruijn (false_term, stack);
   struct DEBRUIJN * y = make_debruijn_closure (false_debruijn, stack);
@@ -156,7 +157,7 @@ struct TERM * eval_term (struct TERM * term, struct ENV * env) {
 	    make_term_application(make_term_variable("f"),
 				  make_term_variable("x")),
 	    make_term_variable("y"))));
-  env = set_env (env, "cons", make_value_closure ("x", cons_term, env));
+  env = set_env (env, "cons", make_term_closure ("x", cons_term, env));
   stack = set_stack(stack,"x",NULL);
   struct DEBRUIJN * cons_debruijn = term_to_debruijn (cons_term, stack);
   stack = set_stack (stack, "cons", make_debruijn_closure (cons_debruijn, stack));
@@ -172,7 +173,7 @@ struct TERM * eval_term (struct TERM * term, struct ENV * env) {
   struct TERM * fst_term = 
       make_term_application(make_term_variable("x"),
 	make_term_variable("first"));
-  env = set_env (env, "fst", make_value_closure ("x",fst_term, env));
+  env = set_env (env, "fst", make_term_closure ("x",fst_term, env));
   stack = set_stack(stack,"x",NULL);
   struct DEBRUIJN * fst_debruijn = term_to_debruijn (fst_term, stack);
   stack = set_stack (stack, "fst", make_debruijn_closure (fst_debruijn, stack));
@@ -188,7 +189,7 @@ struct TERM * eval_term (struct TERM * term, struct ENV * env) {
   struct TERM * snd_term = 
       make_term_application(make_term_variable("x"),
 	make_term_variable("second"));
-  env = set_env (env, "snd", make_value_closure ("x", snd_term, env));
+  env = set_env (env, "snd", make_term_closure ("x", snd_term, env));
   stack = set_stack(stack,"x",NULL);
   struct DEBRUIJN * snd_debruijn = term_to_debruijn (snd_term, stack);
   stack = set_stack (stack, "snd", make_debruijn_closure (snd_debruijn, stack));
@@ -209,11 +210,18 @@ struct TERM * eval_term (struct TERM * term, struct ENV * env) {
 				    make_term_variable("r")))))));
 
   /* TRANSFORM TERM TO DEBRUIJN TERM */
-  fprint_term(stdout, term,env);
+  TRACE("transform term to debruijn");
+  //fprint_term(stdout, term,env); printf("\n");
   struct DEBRUIJN * d = term_to_debruijn (term, stack);
-  
+  //fprint_debruijn(stdout, d); printf("\n");
+
   /* EVAL DEBRUIJN TERM */
-  struct DEBRUIJN * v_debruijn = eval_debruijn (d, stack);
-  struct TERM * t = debruijn_to_term (v_debruijn, stack);
+  TRACE("eval debruijn term");
+  struct DEBRUIJN * vd = eval_debruijn (d, stack);
+  //fprint_debruijn(stdout, vd);
+
+
+  TRACE("debruijn to term");
+  struct TERM * t = debruijn_to_term (vd, stack);
   return t;
 }
