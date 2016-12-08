@@ -48,36 +48,36 @@ struct TERM {
       char * value;
     } variable;
     struct {
-      struct TERM * term;
+      struct TERM * content;
     } quote;
     struct {
       char * variable;
-      struct TERM * term;
+      struct TERM * body;
     } abstraction;
     struct {
-      struct TERM * term1;
-      struct TERM * term2;
+      struct TERM * left;
+      struct TERM * right;
     } application;
     struct {
       char * variable;
-      struct TERM * term1;
-      struct TERM * term2;
+      struct TERM * init;
+      struct TERM * body;
     } let;
   };
 };
 
 struct TERM * make_term_variable (char * value);
 struct TERM * make_term_integer (int value);
-struct TERM * make_term_abstraction (char * variable, struct TERM * term);
-struct TERM * make_term_quote (struct TERM * term);
-struct TERM * make_term_application (struct TERM * term1, struct TERM * term2);
-struct TERM * make_term_let (char * variable, struct TERM * term1, struct TERM * term2);
+struct TERM * make_term_quote (struct TERM * content);
+struct TERM * make_term_abstraction (char * variable, struct TERM * body);
+struct TERM * make_term_application (struct TERM * left, struct TERM * right);
+struct TERM * make_term_let (char * variable, struct TERM * init, struct TERM * body);
 
 /* ----------------------------------- VALUE -------------------------------- */
 
 enum TYPE_VALUE {
   TYPE_VALUE_INTEGER,
-  TYPE_VALUE_QUOTE,
+  TYPE_VALUE_TERM,
   TYPE_VALUE_CLOSURE
 };
 
@@ -88,18 +88,19 @@ struct VALUE {
       int value;
     } integer;
     struct {
-      struct TERM * term;
-    } quote;
+      struct TERM * value;
+    } term;
     struct {
-      struct TERM * term;
+      char * variable;
+      struct TERM * body;
       struct ENV * env;
     } closure;
   };
 };
 
 struct VALUE * make_value_integer (int value);
-struct VALUE * make_value_quote (struct TERM * term);
-struct VALUE * make_value_closure (struct TERM * term, struct ENV * env);
+struct VALUE * make_value_term (struct TERM * value);
+struct VALUE * make_value_closure (char * variable, struct TERM * body, struct ENV * env);
 
 /* ----------------------------------- EVAL --------------------------------- */
 
@@ -120,7 +121,7 @@ struct STACK {
 };
 
 struct STACK * make_stack();
-struct DEBRUIJN * get_stack (struct STACK * stack, int position);
+struct STACK * get_stack (struct STACK * stack, int position);
 int get_stack_position (struct STACK * stack, char * ident);
 struct STACK * set_stack (struct STACK * stack, char * ident, struct DEBRUIJN * debruijn);
 void fprint_stack (FILE * out, struct STACK * stack);
@@ -144,29 +145,30 @@ struct DEBRUIJN {
       int value;
     } variable;
     struct {
-      struct DEBRUIJN * debruijn;
+      struct DEBRUIJN * value;
     } quote;
     struct {
-      struct DEBRUIJN * debruijn;
+      struct DEBRUIJN * body;
     } abstraction ;
     struct {
-      struct DEBRUIJN * debruijn;
+      struct DEBRUIJN * body;
       struct STACK * stack;
     } closure ;
     struct {
-      struct DEBRUIJN * debruijn1;
-      struct DEBRUIJN * debruijn2;
+      struct DEBRUIJN * left;
+      struct DEBRUIJN * right;
     } application ;
   };
 };
 
 
-struct DEBRUIJN * make_debruijn_closure (struct DEBRUIJN * debruijn,
-					 struct STACK * stack);
+struct DEBRUIJN * make_debruijn_closure (struct DEBRUIJN * debruijn, struct STACK * stack);
 struct DEBRUIJN * term_to_debruijn (struct TERM * term, struct STACK * stack);
+struct TERM * debruijn_to_term (struct DEBRUIJN * debruijn, struct STACK * stack);
 int compare_debruijn (struct DEBRUIJN * debruijn1, struct DEBRUIJN * debruijn2);
 void fprint_debruijn (FILE * out, struct DEBRUIJN * debruijn);
 struct DEBRUIJN * eval_debruijn (struct DEBRUIJN * debruijn, struct STACK * stack);
 
+struct TERM * eval_term (struct TERM * term, struct ENV * env);
 #endif
 

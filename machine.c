@@ -3,6 +3,16 @@
 #include <stdio.h>
 #include <string.h>
 
+/* */
+
+char * gen_ident () {
+  static int n = 0;
+  char * ret = malloc(sizeof(char)*32);
+  sscanf (ret, "x%d", &n);
+  n++;
+  return ret;
+}
+
 /* ------------------------------------ ENV --------------------------------- */
 
 struct ENV * make_env () {
@@ -51,32 +61,32 @@ struct TERM * make_term_variable (char * value) {
 struct TERM * make_term_quote (struct TERM * term) {
   struct TERM * ret = malloc (sizeof (struct TERM));
   ret->type = TYPE_TERM_QUOTE;
-  ret->quote.term = term;
+  ret->quote.content = term;
   return ret;
 }
 
-struct TERM * make_term_abstraction (char * variable, struct TERM * term) {
+struct TERM * make_term_abstraction (char * variable, struct TERM * body) {
   struct TERM * ret = malloc (sizeof (struct TERM));
   ret->type = TYPE_TERM_ABSTRACTION;
   ret->abstraction.variable = variable;
-  ret->abstraction.term = term;
+  ret->abstraction.body = body;
   return ret;
 }
 
-struct TERM * make_term_application (struct TERM * term1, struct TERM * term2) {
+struct TERM * make_term_application (struct TERM * left, struct TERM * right) {
   struct TERM * ret = malloc (sizeof (struct TERM));
   ret->type = TYPE_TERM_APPLICATION;
-  ret->application.term1 = term1;
-  ret->application.term2 = term2;
+  ret->application.left = left;
+  ret->application.right = right;
   return ret;
 }
 
-struct TERM * make_term_let (char * variable, struct TERM * term1, struct TERM * term2) {
+struct TERM * make_term_let (char * variable, struct TERM * init, struct TERM * body) {
   struct TERM * ret = malloc (sizeof (struct TERM));
   ret->type = TYPE_TERM_LET;
   ret->let.variable = variable;
-  ret->let.term1 = term1;
-  ret->let.term2 = term2;
+  ret->let.init = init;
+  ret->let.body = body;
   return ret;
 }
 
@@ -89,17 +99,18 @@ struct VALUE * make_value_integer (int value) {
   return ret;
 }
 
-struct VALUE * make_value_quote (struct TERM * term) {
+struct VALUE * make_value_term (struct TERM * value) {
   struct VALUE * ret = malloc (sizeof (struct VALUE));
-  ret->type = TYPE_VALUE_QUOTE;
-  ret->quote.term = term;
+  ret->type = TYPE_VALUE_TERM;
+  ret->term.value = value;
   return ret;
 }
 
-struct VALUE * make_value_closure (struct TERM * term, struct ENV * env) {
+struct VALUE * make_value_closure (char * var, struct TERM * body, struct ENV * env) {
   struct VALUE * ret = malloc (sizeof (struct VALUE));
   ret->type = TYPE_VALUE_CLOSURE;
-  ret->closure.term = term;
+  ret->closure.variable = var;
+  ret->closure.body = body;
   ret->closure.env = env;
   return ret;
 }
@@ -113,33 +124,26 @@ struct VALUE * evaluate_term (struct TERM * term, struct ENV * env) {
   case TYPE_TERM_VARIABLE : {
     return get_env (env, term->variable.value) ; }
   case TYPE_TERM_QUOTE : {
-    return make_value_quote (term->quote.term) ; }
+    return make_value_term (term->quote.content) ; }
   case TYPE_TERM_ABSTRACTION : {
-    return make_value_closure (term, env); }
+    return make_value_closure (term->abstraction.variable, term->abstraction.body, env); }
   case TYPE_TERM_APPLICATION : {
-    struct VALUE * value1 = evaluate_term (term->application.term1, env);
+    struct VALUE * value1 = evaluate_term (term->application.left, env);
     switch (value1->type) {
     case TYPE_VALUE_CLOSURE : {
-      switch (value1->closure.term->type) {
-      case TYPE_TERM_ABSTRACTION : {
-	return evaluate_term (value1->closure.term->abstraction.term, 
-			      set_env (value1->closure.env,
-				       value1->closure.term->abstraction.variable, 
-				       evaluate_term (term->application.term2, 
-						      env)));
-      }
-      default : {
-	fprintf (stderr, "Not an abstraction\n");
-	return NULL;
-      }}
+      return evaluate_term (value1->closure.body,
+			    set_env (value1->closure.env,
+				     value1->closure.variable, 
+				     evaluate_term (term->application.right, 
+						    env)));
     }
     default : {
       fprintf (stderr, "Not a closure\n");
       return NULL;
     }}}
   case TYPE_TERM_LET : {
-    struct VALUE * value1 = evaluate_term (term->let.term1, env);
-    return evaluate_term (term->let.term2, set_env (env, term->let.variable, value1));
+    struct VALUE * value1 = evaluate_term (term->let.init, env);
+    return evaluate_term (term->let.body, set_env (env, term->let.variable, value1));
   }}
 }
 
@@ -176,29 +180,29 @@ void fprint_term (FILE * out, struct TERM * tree, struct ENV * env) {
     case TYPE_TERM_QUOTE : 
       TRACE("quote");
       fprintf (out, "(quote ");
-      fprint_term (out,tree->quote.term, env) ;
+      fprint_term (out,tree->quote.content, env) ;
       fprintf(out,")");
       break;
     case TYPE_TERM_ABSTRACTION : 
       TRACE("abstraction")
       fprintf(out,"(lambda (%s) ", tree->abstraction.variable);
-      fprint_term (out, tree->abstraction.term, env) ;
+      fprint_term (out, tree->abstraction.body, env) ;
       fprintf(out,")");
       break;
     case TYPE_TERM_APPLICATION : 
       TRACE("application")
       fprintf(out,"(");
-      fprint_term (out, tree->application.term1, env) ;
+      fprint_term (out, tree->application.left, env) ;
       fprintf(out, " ");
-      fprint_term (out, tree->application.term2, env) ;
+      fprint_term (out, tree->application.right, env) ;
       fprintf(out,")");
       break;
     case TYPE_TERM_LET : 
       TRACE("let")
       fprintf(out,"(let (%s ", tree->let.variable);
-      fprint_term (out, tree->let.term1, env) ;
+      fprint_term (out, tree->let.init, env) ;
       fprintf(out, ")\n");
-      fprint_term (out, tree->let.term2, env) ;
+      fprint_term (out, tree->let.body, env) ;
       fprintf(out,")");
       break;
     }
@@ -213,13 +217,11 @@ void fprint_value (FILE * out, struct VALUE * value, struct ENV * env) {
   case TYPE_VALUE_INTEGER :
     fprintf(out,"%d", value->integer.value);
     break;
-  case TYPE_VALUE_QUOTE :
-    fprintf(out,"(quote ");
-    fprint_term (out,value->quote.term, NULL);
-    fprintf(out,")");
+  case TYPE_VALUE_TERM :
+    fprint_term (out,value->term.value, NULL);
     break;
   case TYPE_VALUE_CLOSURE : 
-    fprint_term (out,value->closure.term, env) ;
+    fprint_term (out,value->closure.body, env) ; //TODO: display variable
     fprintf(out,"[");
     fprint_env (out,value->closure.env);
     fprintf(out,"]");
@@ -252,25 +254,25 @@ void fprint_debruijn (FILE * out, struct DEBRUIJN * debruijn) {
     break; }
   case TYPE_DEBRUIJN_QUOTE : {
     fprintf(out,"(quote ");
-    fprint_debruijn (out, debruijn->quote.debruijn);
+    fprint_debruijn (out, debruijn->quote.value);
     fprintf(out,")");
     break ; }
   case TYPE_DEBRUIJN_ABSTRACTION : {
     fprintf(out,"(lambda [.] ");
-    fprint_debruijn (out, debruijn->abstraction.debruijn);
+    fprint_debruijn (out, debruijn->abstraction.body);
     fprintf(out,")");
     break ; }
   case TYPE_DEBRUIJN_CLOSURE : {
-    fprint_debruijn (out, debruijn->closure.debruijn);
+    fprint_debruijn (out, debruijn->closure.body);
     fprintf(out, " { ");
     fprint_stack (out, debruijn->closure.stack);
     fprintf(out, "}");
     break ; }
   case TYPE_DEBRUIJN_APPLICATION : {
     fprintf(out,"(");
-    fprint_debruijn (out, debruijn->application.debruijn1);
+    fprint_debruijn (out, debruijn->application.left);
     fprintf(out," ");
-    fprint_debruijn (out, debruijn->application.debruijn2);
+    fprint_debruijn (out, debruijn->application.right);
     fprintf(out,")");
     break ; }
   }
@@ -282,7 +284,7 @@ struct STACK * make_stack() {
   return NULL;
 }
 
-struct DEBRUIJN * get_stack (struct STACK * stack, int position) {
+struct STACK * get_stack (struct STACK * stack, int position) {
   while (stack != NULL && position > 0) {
     position--;
     stack = stack->down;
@@ -292,7 +294,7 @@ struct DEBRUIJN * get_stack (struct STACK * stack, int position) {
     exit(1);
   }
   else {
-    return stack->debruijn;
+    return stack;
   }
 }
 
@@ -303,7 +305,7 @@ int get_stack_position (struct STACK * stack, char * ident) {
     stack = stack->down;
   }
   if (stack == NULL) {
-    fprintf(stderr, "Error: Not found ident \"%s\"\n", ident);
+    fprintf(stderr, "%s: Not found ident \"%s\"\n",__func__,  ident);
     exit(1);
   }
   else {
@@ -336,12 +338,13 @@ struct DEBRUIJN * make_debruijn_closure (struct DEBRUIJN * debruijn,
   struct DEBRUIJN * ret;
   ret = malloc (sizeof (struct DEBRUIJN));
   ret->type = TYPE_DEBRUIJN_CLOSURE;
-  ret->closure.debruijn = debruijn;
+  ret->closure.body = debruijn;
   ret->closure.stack = stack;
   return ret;
 }
 
 struct DEBRUIJN * term_to_debruijn (struct TERM * term, struct STACK * stack) {
+  TRACE("term_to_debruijn");
   struct DEBRUIJN * debruijn;
   debruijn = malloc (sizeof (struct DEBRUIJN));
   switch (term->type) {
@@ -359,35 +362,79 @@ struct DEBRUIJN * term_to_debruijn (struct TERM * term, struct STACK * stack) {
   case TYPE_TERM_QUOTE : {
     TRACE("quote")
     debruijn->type = TYPE_DEBRUIJN_QUOTE;
-    debruijn->quote.debruijn = term_to_debruijn (term->quote.term, NULL);
+    debruijn->quote.value = term_to_debruijn (term->quote.content, NULL); // TODO: NULL stack ?
     break; }
   case TYPE_TERM_ABSTRACTION : {
     TRACE("abstraction")
     debruijn->type = TYPE_DEBRUIJN_ABSTRACTION;
-    debruijn->abstraction.debruijn = 
-      term_to_debruijn (term->abstraction.term, 
+    debruijn->abstraction.body = 
+      term_to_debruijn (term->abstraction.body, 
 			set_stack (stack, term->abstraction.variable, NULL));
     break; }
   case TYPE_TERM_APPLICATION : {
     TRACE("application")
     debruijn->type = TYPE_DEBRUIJN_APPLICATION;
-    debruijn->application.debruijn1 = term_to_debruijn (term->application.term1, stack);
-    debruijn->application.debruijn2 = term_to_debruijn (term->application.term2, stack);
+    debruijn->application.left = term_to_debruijn (term->application.left, stack);
+    debruijn->application.right = term_to_debruijn (term->application.right, stack);
     break; }
   case TYPE_TERM_LET : {
     TRACE("let")
     struct DEBRUIJN * abstraction;
     abstraction = malloc (sizeof (struct DEBRUIJN));
     abstraction->type = TYPE_DEBRUIJN_ABSTRACTION;
-    abstraction->abstraction.debruijn = 
-      term_to_debruijn (term->let.term2,
+    abstraction->abstraction.body = 
+      term_to_debruijn (term->let.body,
 			set_stack (stack, term->let.variable, NULL));
     debruijn->type = TYPE_DEBRUIJN_APPLICATION;
-    debruijn->application.debruijn1 = abstraction;
-    debruijn->application.debruijn2 = term_to_debruijn (term->let.term1, stack);
+    debruijn->application.left = abstraction;
+    debruijn->application.right = term_to_debruijn (term->let.init, stack);
     break; }
   }
   return debruijn;
+}
+
+struct TERM * debruijn_to_term (struct DEBRUIJN * debruijn, struct STACK * stack) {
+  switch (debruijn->type) {
+  case TYPE_DEBRUIJN_INTEGER : {
+    TRACE("integer");
+    return make_term_integer(debruijn->integer.value);
+    break;
+  }
+  case TYPE_DEBRUIJN_VARIABLE : {
+    TRACE("variable");
+    struct STACK * v = get_stack (stack, debruijn->variable.value);
+    return make_term_variable (v->ident);
+    break;
+  }
+  case TYPE_DEBRUIJN_QUOTE : {
+    TRACE("quote");
+    return make_term_quote (debruijn_to_term (debruijn->quote.value, make_stack()));
+    break ; 
+  }
+  case TYPE_DEBRUIJN_ABSTRACTION : {
+    TRACE("abstraction");
+    char * var = gen_ident();
+    struct STACK * s = set_stack(stack, gen_ident(), NULL); // We just want to get ident
+    return make_term_abstraction (var,debruijn_to_term(debruijn->abstraction.body, s));
+    break ; 
+  }
+  case TYPE_DEBRUIJN_CLOSURE : {
+    TRACE("closure");
+    fprintf(stderr, "Cannot transform debruijn closure to term\n");
+    exit(1);
+    break ; 
+  }
+  case TYPE_DEBRUIJN_APPLICATION : {
+    TRACE("application");
+    return make_term_application(debruijn_to_term(debruijn->application.left, stack),
+				 debruijn_to_term(debruijn->application.right, stack));
+    break;
+  }
+  default:{
+    fprintf(stderr, "Unknown debruijn term type\n");
+    exit(1);
+  }
+  }
 }
 
 int compare_debruijn (struct DEBRUIJN * debruijn1, struct DEBRUIJN * debruijn2) {
@@ -400,22 +447,22 @@ int compare_debruijn (struct DEBRUIJN * debruijn1, struct DEBRUIJN * debruijn2) 
       return debruijn1->variable.value == debruijn2->variable.value;
       break ; }
     case TYPE_DEBRUIJN_QUOTE : {
-      return compare_debruijn (debruijn1->quote.debruijn,
-			       debruijn2->quote.debruijn);
+      return compare_debruijn (debruijn1->quote.value,
+			       debruijn2->quote.value);
       break ; }
     case TYPE_DEBRUIJN_ABSTRACTION : {
-      return compare_debruijn (debruijn1->abstraction.debruijn,
-			       debruijn2->abstraction.debruijn);
+      return compare_debruijn (debruijn1->abstraction.body,
+			       debruijn2->abstraction.body);
       break ; }
     case TYPE_DEBRUIJN_CLOSURE : {
-      return compare_debruijn (debruijn1->closure.debruijn,
-			       debruijn2->closure.debruijn);
+      return compare_debruijn (debruijn1->closure.body,
+			       debruijn2->closure.body);
       break ; }
     case TYPE_DEBRUIJN_APPLICATION : {
-      return compare_debruijn (debruijn1->application.debruijn1,
-			       debruijn2->application.debruijn1)
-	&& compare_debruijn (debruijn1->application.debruijn2,
-			     debruijn2->application.debruijn2);
+      return compare_debruijn (debruijn1->application.left,
+			       debruijn2->application.left)
+	&& compare_debruijn (debruijn1->application.right,
+			     debruijn2->application.right);
       break ; }
     }
   }
@@ -431,12 +478,12 @@ struct DEBRUIJN * eval_debruijn (struct DEBRUIJN * debruijn, struct STACK * stac
   }
   case TYPE_DEBRUIJN_VARIABLE : {
     TRACE("variable");
-    return get_stack (stack, debruijn->variable.value);
+    return get_stack (stack, debruijn->variable.value)->debruijn;
     break;
   }
   case TYPE_DEBRUIJN_QUOTE : {
     TRACE("quote");
-    return debruijn->quote.debruijn;
+    return debruijn->quote.value;
     break ; 
   }
   case TYPE_DEBRUIJN_ABSTRACTION : {
@@ -451,22 +498,14 @@ struct DEBRUIJN * eval_debruijn (struct DEBRUIJN * debruijn, struct STACK * stac
   }
   case TYPE_DEBRUIJN_APPLICATION : {
     TRACE("application");
-    struct DEBRUIJN * v = eval_debruijn (debruijn->application.debruijn1, stack);
+    struct DEBRUIJN * v = eval_debruijn (debruijn->application.left, stack);
     switch (v->type) {
     case TYPE_DEBRUIJN_CLOSURE : {
-      switch (v->closure.debruijn->type) {
-      case TYPE_DEBRUIJN_ABSTRACTION : {
-	return eval_debruijn (v->closure.debruijn->abstraction.debruijn, 
-			      set_stack (v->closure.stack,
-					 NULL,
-					 eval_debruijn (debruijn->application.debruijn2,
-							stack)));
-	break;
-      }
-      default: {
-	fprintf (stderr, "Not a debruijn abstraction\n");
-	exit(1);
-      }}
+      return eval_debruijn (v->closure.body, 
+			    set_stack (v->closure.stack,
+				       gen_ident(),
+				       eval_debruijn (debruijn->application.right,
+						      stack)));
     }
     default : {
       fprintf(stderr, "Not a debruijn closure\n");

@@ -66,7 +66,10 @@ int main (int argc, char *argv[]) {
   FILE * input_file = stdin;
   FILE * output_file = stdout;
   debug_file = fopen("debug.log","w");
+  char eval = 0;
   char silent = 0;
+
+  /* --eval, --compile, --bytecode-compile, --bytecode-eval */
 
   int i = 1;
   while (i < argc) {
@@ -85,6 +88,9 @@ int main (int argc, char *argv[]) {
     else if (strcmp (argv[i], "--silent") == 0 || strcmp (argv[i], "-s") == 0) {
       silent = 1;
     }
+    else if (strcmp (argv[i], "--eval") == 0 || strcmp (argv[i], "-e") == 0) {
+      eval = 1;
+    }
     else {
       fprintf (stderr, "Unknown option %s\n", argv[i]);
       exit(1);
@@ -96,70 +102,99 @@ int main (int argc, char *argv[]) {
   yyparse();
 
   struct ENV * env = make_env();
+
+  if (silent == 0) {
+    fprintf(output_file, ">> Fun 1.0 <<\n");
+    fprint_term (output_file, term, env);
+    fprintf(output_file, "\n=> ");
+  }
+  struct TERM * t = eval_term (term, env);
+  //fprint_debruijn(output_file, v_debruijn);
+  //fprintf (output_file, "\n");
+  return 0;
+}
+
+int yyerror (char *s) {
+  printf ("Syntactic error\n");
+  exit (0);
+}
+
+struct TERM * eval_term (struct TERM * term, struct ENV * env) {
+  TRACE("eval_term");
   struct STACK * stack = make_stack();
 
   /* POPULATE ENVIRONMENT */
 
   /* TRUE */
+  TRACE("true")
   struct TERM * true_term = 
-    make_term_abstraction ("x", 
-      make_term_abstraction("y", 
-	make_term_variable("x")));
-  env = set_env (env, "true", make_value_closure (true_term, env));
+    make_term_abstraction("y", 
+      make_term_variable("x"));
+  env = set_env (env, "true", make_value_closure ("x", true_term, env));
+  stack = set_stack(stack,"x",NULL);
   struct DEBRUIJN * true_debruijn = term_to_debruijn (true_term, stack);
   struct DEBRUIJN * x = make_debruijn_closure (true_debruijn, stack);
   stack = set_stack (stack, "true", x);
 
   /* FALSE */
+  TRACE("false")
   struct TERM * false_term = 
-    make_term_abstraction("x", 
       make_term_abstraction("y", 
-	make_term_variable("y")));
-  env = set_env (env, "false", make_value_closure (false_term, env));
+	make_term_variable("y"));
+  env = set_env (env, "false", make_value_closure ("x", false_term, env));
+  stack = set_stack(stack,"x",NULL);
   struct DEBRUIJN * false_debruijn = term_to_debruijn (false_term, stack);
   struct DEBRUIJN * y = make_debruijn_closure (false_debruijn, stack);
   stack = set_stack (stack, "false", y);
 
   /* CONS */
+  TRACE("cons")
   struct TERM * cons_term = 
-    make_term_abstraction("x",
       make_term_abstraction("y",
         make_term_abstraction("f",
 	  make_term_application(
 	    make_term_application(make_term_variable("f"),
 				  make_term_variable("x")),
-	    make_term_variable("y")))));
-  env = set_env (env, "cons", make_value_closure (cons_term, env));
+	    make_term_variable("y"))));
+  env = set_env (env, "cons", make_value_closure ("x", cons_term, env));
+  stack = set_stack(stack,"x",NULL);
   struct DEBRUIJN * cons_debruijn = term_to_debruijn (cons_term, stack);
   stack = set_stack (stack, "cons", make_debruijn_closure (cons_debruijn, stack));
            
   /* FIRST */
+  TRACE("first")
   env = set_env (env, "first", get_env (env, "true"));
-  stack = set_stack (stack, "first", get_stack (stack, get_stack_position(stack, "true")));
+  stack = set_stack (stack, "first", 
+		     get_stack (stack, get_stack_position(stack, "true"))->debruijn);
 
   /* FST */
+  TRACE("fst")
   struct TERM * fst_term = 
-    make_term_abstraction("x",
       make_term_application(make_term_variable("x"),
-	make_term_variable("first")));
-  env = set_env (env, "fst", make_value_closure (fst_term, env));
+	make_term_variable("first"));
+  env = set_env (env, "fst", make_value_closure ("x",fst_term, env));
+  stack = set_stack(stack,"x",NULL);
   struct DEBRUIJN * fst_debruijn = term_to_debruijn (fst_term, stack);
   stack = set_stack (stack, "fst", make_debruijn_closure (fst_debruijn, stack));
   
   /* SECOND */
+  TRACE("second")
   env = set_env (env, "second", get_env (env, "false"));
-  stack = set_stack (stack, "second", get_stack (stack, get_stack_position(stack, "false")));
+  stack = set_stack (stack, "second", 
+		     get_stack (stack, get_stack_position(stack, "false"))->debruijn);
 
   /* SND */
+  TRACE("snd")
   struct TERM * snd_term = 
-    make_term_abstraction("x",
       make_term_application(make_term_variable("x"),
-	make_term_variable("second")));
-  env = set_env (env, "snd", make_value_closure (snd_term, env));
+	make_term_variable("second"));
+  env = set_env (env, "snd", make_value_closure ("x", snd_term, env));
+  stack = set_stack(stack,"x",NULL);
   struct DEBRUIJN * snd_debruijn = term_to_debruijn (snd_term, stack);
   stack = set_stack (stack, "snd", make_debruijn_closure (snd_debruijn, stack));
   
   /* BIND */
+  TRACE("bind")
   struct TERM * bind_term =
     make_term_abstraction ("f",
       make_term_abstraction("g",
@@ -173,26 +208,12 @@ int main (int argc, char *argv[]) {
 	      make_term_application(make_term_variable("snd"),
 				    make_term_variable("r")))))));
 
-  /* TRANSFORM INPUT TO DEBRUIJN */
-				       
+  /* TRANSFORM TERM TO DEBRUIJN TERM */
+  fprint_term(stdout, term,env);
   struct DEBRUIJN * d = term_to_debruijn (term, stack);
-  //fprint_debruijn(output_file, d);
-  //fprintf(output_file,"\n");
   
   /* EVAL DEBRUIJN TERM */
   struct DEBRUIJN * v_debruijn = eval_debruijn (d, stack);
-
-  if (!silent) {
-    fprintf(output_file, ">> Fun 1.0 <<\n");
-    fprint_term (output_file, term, env);
-    fprintf(output_file, "\n=> ");
-  }
-  fprint_debruijn(output_file, v_debruijn);
-  fprintf (output_file, "\n");
-  return 0;
-}
-
-int yyerror (char *s) {
-  printf ("Syntactic error\n");
-  exit (0);
+  struct TERM * t = debruijn_to_term (v_debruijn, stack);
+  return t;
 }
