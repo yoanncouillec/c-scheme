@@ -4,4 +4,4 @@
       (let (not (lambda (x) (((cond x) false) true)))
 	(let (or (lambda (x) (lambda (y) (((cond x) true) y))))
 	  (let (and (lambda (x) (lambda (y) (((cond x) y) false))))
-	    (not ((and false) ((or true) true)))))))))
+	    ((or true) true)))))))
