@@ -60,12 +60,12 @@ LETX : TOKEN_LPAREN TOKEN_LETX TOKEN_LPAREN TOKEN_IDENT TERM TOKEN_RPAREN TERM T
 #include <stdio.h>
 
 int main (int argc, char *argv[]) {
-
+  TRACE("main");
   /* OPTIONS */
 
   FILE * input_file = stdin;
   FILE * output_file = stdout;
-  debug_file = fopen("debug.log","w");
+  debug_file = stdout; //fopen("debug.log","w");
   char eval = 0;
   char silent = 0;
 
@@ -104,12 +104,14 @@ int main (int argc, char *argv[]) {
   struct ENV * env = make_env();
 
   if (silent == 0) {
-    fprintf(output_file, ">> Fun 1.0 <<\n");
-    fprint_term (output_file, term, env);
-    fprintf(output_file, "\n=> ");
+    fprintf(output_file, ">> Fun 1.0 <<\ninput term = ");
+    fprint_term (output_file, term);
+    fprintf(output_file, "\nresult =  ");
   }
+
   struct TERM * t = eval_term (term, env);
-  fprint_term(output_file, t,env);
+
+  fprint_term(output_file, t);
   fprintf (output_file, "\n\n");
 
   return 0;
@@ -218,7 +220,7 @@ struct TERM * eval_term (struct TERM * term, struct ENV * env) {
   /* EVAL DEBRUIJN TERM */
   TRACE("eval debruijn term");
   struct DEBRUIJN * vd = eval_debruijn (d, stack);
-  //fprint_debruijn(stdout, vd);
+  fprint_debruijn(stdout, vd);
 
 
   TRACE("debruijn to term");

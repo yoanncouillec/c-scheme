@@ -138,28 +138,9 @@ struct TERM * evaluate_term (struct TERM * term, struct ENV * env) {
   }}
 }
 
-/* ----------------------------------- PRINT -------------------------------- */
-
-/* Return the ident. coresponding to a debruijn term */
-/* char * get_alias (struct ENV * env, struct DEBRUIJN * debruijn) { */
-/*   if (env == NULL) { */
-/*     return NULL; */
-/*   } */
-/*   else { */
-/*     if (compare_debruijn (debruijn, term_to_debruijn (env->value, NULL)) == 0) { */
-/*       return env->ident; */
-/*     } */
-/*     else { */
-/*       return get_alias (env->next, debruijn); */
-/*     } */
-/*   } */
-/* } */
-
-void fprint_term (FILE * out, struct TERM * tree, struct ENV * env) {
-  //struct DEBRUIJN * debruijn = term_to_debruijn (tree, NULL);
-  //char * alias = get_alias (env, debruijn);
-  //if (alias == NULL) {
-    switch (tree->type) {
+void fprint_term (FILE * out, struct TERM * tree) {
+  TRACE("fprint_term\n");
+  switch (tree->type) {
     case TYPE_TERM_INTEGER :
       TRACE("integer");
       fprintf(out,"%d", tree->integer.value);
@@ -171,56 +152,52 @@ void fprint_term (FILE * out, struct TERM * tree, struct ENV * env) {
     case TYPE_TERM_QUOTE : 
       TRACE("quote");
       fprintf (out, "(quote ");
-      fprint_term (out,tree->quote.content, env) ;
+      fprint_term (out,tree->quote.content) ;
       fprintf(out,")");
       break;
     case TYPE_TERM_ABSTRACTION : 
       TRACE("abstraction")
       fprintf(out,"(lambda (%s) ", tree->abstraction.variable);
-      fprint_term (out, tree->abstraction.body, env) ;
+      fprint_term (out, tree->abstraction.body) ;
       fprintf(out,")");
       break;
     case TYPE_TERM_CLOSURE : 
       TRACE("closure")
       fprintf(out,"(lambda (%s) ", tree->closure.variable);
-      fprint_term (out, tree->closure.body, env) ;
-      fprintf(out,"){");
+      fprint_term (out, tree->closure.body) ;
+      fprintf(out,")[");
       fprint_env(out, tree->closure.env);
-      fprintf(out,"}");
+      fprintf(out,"]");
       break;
     case TYPE_TERM_APPLICATION : 
       TRACE("application")
       fprintf(out,"(");
-      fprint_term (out, tree->application.left, env) ;
+      fprint_term (out, tree->application.left) ;
       fprintf(out, " ");
-      fprint_term (out, tree->application.right, env) ;
+      fprint_term (out, tree->application.right) ;
       fprintf(out,")");
       break;
     case TYPE_TERM_LET : 
       TRACE("let")
       fprintf(out,"(let (%s ", tree->let.variable);
-      fprint_term (out, tree->let.init, env) ;
-      fprintf(out, ")\n");
-      fprint_term (out, tree->let.body, env) ;
+      fprint_term (out, tree->let.init) ;
+      fprintf(out, ") ");
+      fprint_term (out, tree->let.body) ;
       fprintf(out,")");
       break;
     }
-    //}
-    //else {
-    //fprintf(out,"%s", alias);
-    //}
 }
 
 void fprint_env (FILE * out, struct ENV * env) {
   if (env != NULL) {
     if (env->next != NULL) {
       fprintf(out,"%s -> ", env->ident);
-      fprint_term (out,env->term, env);
+      fprint_term (out,env->term);
       printf(", ");
     }
     else{
       fprintf(out,"%s -> ", env->ident);
-      fprint_term (out,env->term, env);
+      fprint_term (out,env->term);
     }
   }
 }

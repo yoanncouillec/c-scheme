@@ -86,7 +86,7 @@ struct TERM * evaluate_term (struct TERM * term, struct ENV * env);
 
 /* ----------------------------------- PRINT -------------------------------- */
 
-void fprint_term (FILE * out, struct TERM * term, struct ENV * env);
+void fprint_term (FILE * out, struct TERM * term);
 void fprint_env (FILE * out, struct ENV * env);
 
 /* --------------------------------- DE BRUIJN ------------------------------ */
